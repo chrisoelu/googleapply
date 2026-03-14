@@ -3,6 +3,7 @@
 const backendBase = import.meta.env.VITE_BACKEND_BASE || "http://localhost:8000";
 const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 180;
+const INTRO_YOUTUBE_EMBED_URL = "https://www.youtube-nocookie.com/embed/_XujnsAm7fk?rel=0";
 
 const emptyForm = {
   first_name: "",
@@ -157,8 +158,20 @@ function App() {
     setSavingForm(true);
     setError("");
     setSuccess("");
+    let formSaved = false;
 
     try {
+      if (selectedVideo && selectedVideo.size > MAX_VIDEO_BYTES) {
+        throw new Error("Video ist groesser als 300MB.");
+      }
+
+      if (selectedVideo) {
+        const duration = await getVideoDurationSeconds(selectedVideo);
+        if (Number.isFinite(duration) && duration > MAX_VIDEO_SECONDS) {
+          throw new Error("Video ist laenger als 3 Minuten.");
+        }
+      }
+
       const response = await fetch(`${backendBase}/api/form.php`, {
         method: "POST",
         credentials: "include",
@@ -173,11 +186,38 @@ function App() {
         throw new Error(data.error || "Formular konnte nicht gespeichert werden.");
       }
 
-      setSuccessMessage("Formular gespeichert.");
+      formSaved = true;
+
+      if (selectedVideo) {
+        setUploadingVideo(true);
+
+        const formData = new FormData();
+        formData.append("video", selectedVideo);
+
+        const videoResponse = await fetch(`${backendBase}/api/video-upload.php`, {
+          method: "POST",
+          credentials: "include",
+          body: formData
+        });
+
+        const videoData = await videoResponse.json().catch(() => ({}));
+        if (!videoResponse.ok) {
+          throw new Error(videoData.error || "Video konnte nicht gespeichert werden.");
+        }
+      }
+
+      setSuccessMessage(selectedVideo ? "Formular und Video gespeichert." : "Formular gespeichert.");
       await loadForm();
     } catch (err) {
-      setErrorMessage(err.message || "Formular konnte nicht gespeichert werden.");
+      const fallbackMessage = "Formular konnte nicht gespeichert werden.";
+      const errorMessage = err.message || fallbackMessage;
+      if (formSaved && selectedVideo) {
+        setErrorMessage(`Formular wurde gespeichert, aber ${errorMessage}`);
+      } else {
+        setErrorMessage(errorMessage);
+      }
     } finally {
+      setUploadingVideo(false);
       setSavingForm(false);
     }
   };
@@ -198,50 +238,6 @@ function App() {
       };
       videoElement.src = objectUrl;
     });
-
-  const uploadVideo = async () => {
-    if (!selectedVideo) {
-      setErrorMessage("Bitte zuerst ein Video auswaehlen.");
-      return;
-    }
-
-    if (selectedVideo.size > MAX_VIDEO_BYTES) {
-      setErrorMessage("Video ist groesser als 300MB.");
-      return;
-    }
-
-    setUploadingVideo(true);
-    setError("");
-    setSuccess("");
-
-    try {
-      const duration = await getVideoDurationSeconds(selectedVideo);
-      if (Number.isFinite(duration) && duration > MAX_VIDEO_SECONDS) {
-        throw new Error("Video ist laenger als 3 Minuten.");
-      }
-
-      const formData = new FormData();
-      formData.append("video", selectedVideo);
-
-      const response = await fetch(`${backendBase}/api/video-upload.php`, {
-        method: "POST",
-        credentials: "include",
-        body: formData
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || "Video konnte nicht gespeichert werden.");
-      }
-
-      setSuccessMessage("Video gespeichert.");
-      await loadForm();
-    } catch (err) {
-      setErrorMessage(err.message || "Video konnte nicht gespeichert werden.");
-    } finally {
-      setUploadingVideo(false);
-    }
-  };
 
   const deleteVideo = async () => {
     setDeletingVideo(true);
@@ -277,6 +273,18 @@ function App() {
     return `${backendBase}/api/video.php?v=${token}`;
   }, [video.has_video, video.uploaded_at]);
 
+  const renderIntroVideo = () => (
+    <div className="youtube-video">
+      <iframe
+        src={INTRO_YOUTUBE_EMBED_URL}
+        title="YouTube Video"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+      />
+    </div>
+  );
+
   return (
     <div className="app">
       <header className="top-bar">
@@ -296,14 +304,18 @@ function App() {
           {success ? <p className="success">{success}</p> : null}
 
           {!loadingUser && !user ? (
-            <button className="login-btn" onClick={loginWithGoogle}>
-              Uber Google einloggen
-            </button>
+            <>
+              {renderIntroVideo()}
+              <button className="login-btn" onClick={loginWithGoogle}>
+                Uber Google einloggen
+              </button>
+            </>
           ) : null}
 
           {!loadingUser && user ? (
             <form className="profile-form" onSubmit={saveForm}>
               {loadingForm ? <p>Lade Formular...</p> : null}
+              {renderIntroVideo()}
 
               <div className="row row-2">
                 <label className="field">
@@ -362,16 +374,18 @@ function App() {
                 />
               </label>
 
-              <label className="field">
-                <span>Social-Media-Namen</span>
-                <input
-                  type="text"
-                  name="social_media"
-                  value={form.social_media}
-                  onChange={onFieldChange}
-                  placeholder="z. B. Instagram/TikTok Name"
-                />
-              </label>
+              <div className="info-note">
+                <p className="info-note-title">
+                  Folgende Sachen waeren sonst noch gut fuer mich zu wissen (kannst du auch gerne im Video nennen):
+                </p>
+                <ul>
+                  <li>Hast du irgendwelche Unvertraeglichkeiten in Bezug auf Essen?</li>
+                  <li>Welche mobilen Konsolen hast du bzw. was zockst du momentan?</li>
+                  <li>Machst du aktiv Social Media und wie ist dein Accountname?</li>
+                  <li>Hast du bereits coole Ideen, wo man hinfahren koennte?</li>
+                  <li>Ist es ok fuer dich, wenn ich dich aufnehme und auf Social Media poste?</li>
+                </ul>
+              </div>
 
               <label className="field">
                 <span>Sonstiges</span>
@@ -396,6 +410,7 @@ function App() {
                     type="file"
                     accept="video/*"
                     capture="user"
+                    disabled={savingForm || uploadingVideo || deletingVideo || loadingForm}
                     onChange={(event) => {
                       const file = event.target.files?.[0] || null;
                       setSelectedVideo(file);
@@ -408,28 +423,20 @@ function App() {
                     Ausgewaehlt: {selectedVideo.name} ({(selectedVideo.size / (1024 * 1024)).toFixed(1)} MB)
                   </p>
                 ) : null}
+                {selectedVideo ? <p className="hint">Wird beim Klick auf "Speichern" mitgespeichert.</p> : null}
 
-                <div className="actions inline">
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={uploadVideo}
-                    disabled={uploadingVideo || deletingVideo}
-                  >
-                    {uploadingVideo ? "Upload laeuft..." : "Video speichern"}
-                  </button>
-
-                  {video.has_video ? (
+                {video.has_video ? (
+                  <div className="actions inline">
                     <button
                       type="button"
                       className="danger-btn"
                       onClick={deleteVideo}
-                      disabled={uploadingVideo || deletingVideo}
+                      disabled={savingForm || uploadingVideo || deletingVideo}
                     >
                       {deletingVideo ? "Loesche..." : "Video loeschen"}
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
                 {video.has_video ? (
                   <video className="video-player" controls src={videoSrc} crossOrigin="use-credentials" />

@@ -59,6 +59,20 @@ body {
   font-size: 30px;
 }
 
+.youtube-video {
+  margin: 4px 0 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000000;
+}
+
+.youtube-video iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  aspect-ratio: 16 / 9;
+}
+
 .error {
   margin: 8px 0 10px;
   padding: 10px 12px;
@@ -144,6 +158,26 @@ body {
   margin: 0;
   color: #4b5563;
   font-size: 13px;
+}
+
+.info-note {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #1e3a8a;
+}
+
+.info-note-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.info-note ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
 }
 
 .actions {
